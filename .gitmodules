@@ -1,0 +1,3 @@
+[submodule "tf300tg-kernel-source"]
+	path = tf300tg-kernel-source
+	url = git@bitbucket.org:cb22/tf300tg-kernel-source.git
