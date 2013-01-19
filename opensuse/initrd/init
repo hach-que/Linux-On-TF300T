@@ -1,0 +1,57 @@
+#!/bin/sh
+
+# Mount device filesystem.
+mount -t devtmpfs devtmpfs /dev
+
+# Mount the /data device into a temporary location so we
+# can read the last known boot configuration.
+mount -t ext4 /dev/mmcblk0p8 /mnt2
+LINUX=/mnt2/linux
+
+# Read the last boot configuration.
+. $LINUX/.boot
+
+# Check if we should enter debug mode.
+if [ "$DEBUG" == "true" ]; then
+    mkdir -p /dev/shm
+    mkdir -p /dev/pts
+
+    mount -t devpts devpts /dev/pts
+    mount -t tmpfs tmpfs /dev/shm
+    mount -t proc proc /proc
+    mount -t sysfs sysfs /sys
+
+    # Give us remote access!
+    echo 0 > /sys/class/android_usb/android0/enable
+    echo 0B05 > /sys/class/android_usb/android0/idVendor
+    echo 4D02 > /sys/class/android_usb/android0/idProduct
+    echo rndis > /sys/class/android_usb/android0/functions
+    echo 224 > /sys/class/android_usb/android0/bDeviceClass
+    echo 1 > /sys/class/android_usb/android0/bDeviceSubClass
+    echo 3 > /sys/class/android_usb/android0/bDeviceProtocol
+    echo 1 > /sys/class/android_usb/android0/enable
+
+    ifconfig rndis0 10.0.0.2
+    telnetd -l /bin/sh
+    /bin/sh
+    sleep 100000
+fi
+
+# Mount Linux FS
+mount -t ext4 /dev/mmcblk0p8 /mnt2
+mount -o bind $LINUX /mnt
+
+mount -t proc proc /mnt/proc 
+mount -t sysfs sysfs /mnt/sys    
+
+mount -t devtmpfs devtmps /mnt/dev
+mkdir -p /mnt/dev/pts /mnt/dev/shm
+
+mount -t devpts devpts /mnt/dev/pts
+mount -t tmpfs tmpfs /mnt/dev/shm
+
+umount /dev
+
+# Change roots
+exec switch_root /mnt /usr/lib/systemd/systemd
+

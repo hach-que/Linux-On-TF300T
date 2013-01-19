@@ -1,0 +1,89 @@
+#!/bin/bash
+
+#
+# This script will create the initrd, package the kernel and build
+# an image that can be flashed to boot.
+#
+
+if [ ! -e initrd ]; then
+    echo "STOP: You must run this script from the directory that contains it."
+    exit 1
+fi
+
+# Create build directory if it does not exist.
+if [ ! -d build ]; then
+    mkdir build
+fi
+
+# Enter the initrd directory.
+pushd initrd >/dev/null
+
+# Create any folders that do not exist.
+if [ ! -d dev ]; then
+    mkdir dev
+fi
+if [ ! -d mnt ]; then
+    mkdir mnt
+fi
+if [ ! -d mnt2 ]; then
+    mkdir mnt2
+fi
+if [ ! -d proc ]; then
+    mkdir proc
+fi
+if [ ! -d sys ]; then
+    mkdir sys
+fi
+
+# Check to ensure bin exists.
+if [ ! -d bin ]; then
+    echo "STOP: /bin folder is missing from initrd!  Hard reset current repository head."
+    popd >/dev/null
+    exit 1
+fi
+
+# Check to ensure init exists.
+if [ ! -e init ]; then
+    echo "STOP: /init file is missing from initrd!  Hard reset current repository head."
+    popd >/dev/null
+    exit 1
+fi
+
+# Create the CPIO archive.
+if [ -e ../build/initrd.cpio ]; then
+    rm ../build/initrd.cpio
+fi
+find -L . -depth -print | cpio -o > ../build/initrd.cpio
+
+# Move out of this directory.
+popd >/dev/null
+
+# Move into the build directory.
+pushd build >/dev/null
+
+# Check to see if that worked.
+if [ ! -e initrd.cpio ]; then
+    echo "STOP: initrd CPIO creation failed.  Check above output."
+    exit 1
+fi
+
+# GZIP it.
+if [ -e initrd.cpio.gz ]; then
+    rm initrd.cpio.gz
+fi
+gzip initrd.cpio
+
+# Check to see if that worked.
+if [ ! -e initrd.cpio.gz ]; then
+    echo "STOP: initrd GZIP failed.  Check above output."
+    exit 1
+fi
+
+# Copy the kernel image to this directory.
+cp ../kernel/zImage ./
+if [ ! -e zImage ]; then
+    echo "STOP: Kernel zImage not found.  Make sure the kernel has been built before running this command."
+    exit 1
+fi
+
+# 

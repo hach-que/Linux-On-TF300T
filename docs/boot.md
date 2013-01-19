@@ -92,6 +92,15 @@ clone this to a directory.
 Configuring the kernel
 -------------------------
 
+cb22 also provides a configuration setup for building a kernel for the TF300T.  You can
+automatically get the required configuration by typing
+
+```
+> make cb22_defconfig
+```
+
+<!--
+
 Type the following command to bring up the configuration utility:
 
 ```
@@ -101,7 +110,24 @@ Type the following command to bring up the configuration utility:
 Configure the following options:
 
   * Device Drivers
-    * `ASUS GPS` -> include
+    * ASUS GPS -> include (not module)
+    * Input device support
+      * Generic input layer
+        * Touchscreens
+          * Atmel mXT I2C Touchscreen -> include (not module)
+    * Graphics support
+      * Tegra graphics host driver -> include (not module)
+      * Tegra Display Controller -> include (not module)
+  * System Type
+    * ARM system type -> "NVIDIA Tegra" (scroll down)
+    * Tegra 3 family SOC -> enable
+    * Cardhu board -> enable
+      * Cardhu wifi activator -> include (not module)
+  * Kernel features
+    * Symmetric Multi-Processing -> enable
+    * Support for hot-pluggable CPUs -> enable (should be by default)
+
+-->
 
 Build the kernel
 -------------------
@@ -122,3 +148,18 @@ to verify that it's ARM:
 > file kernel/cpu.o
 kernel/cpu.o: ELF 32-bit LSB relocatable, ARM, version 1, not stripped
 ```
+
+Build Android tools
+---------------------
+
+We need to have the `mkbootimg` program so that we can prepare the final image for flashing.
+Under the `android` directory of the repository, a small subset of the Android system/core
+source code is present that contains the required code.
+
+You can prepare the required tools by typing in that directory:
+
+```
+./prepare
+```
+
+
