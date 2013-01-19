@@ -1,0 +1,29 @@
+#!/bin/bash
+
+#
+# This script will build the mkbootimg tool.
+#
+
+if [ ! -e libmincrypt ]; then
+    echo "STOP: You must run this script from the directory that contains it."
+    exit 1
+fi
+
+# Create build directory if it does not exist.
+if [ ! -d build ]; then
+    mkdir build
+fi
+
+# Build the tools.
+pushd libmincrypt && \
+gcc -c *.c -I../include && \
+ar rcs libmincrypt.a *.o && \
+popd && \
+pushd mkbootimg && \
+gcc mkbootimg.c -o mkbootimg -I../include ../libmincrypt/libmincrypt.a && \
+popd
+
+# Move the result into the build directory.
+mv mkbootimg/mkbootimg build/mkbootimg
+
+exit 0
