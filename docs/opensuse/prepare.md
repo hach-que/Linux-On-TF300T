@@ -8,7 +8,7 @@ and the initrd, which we can flash to the TF300T.
 
 The initrd is a set of files stored in CPIO format, then GZIPd.  In the case of Android, we
 use BusyBox to get this done since it's statically linked and very simple to use.  All we're
-doing in the case of OpenSUSE is using it to mount devices and then calling `switch\_root` to
+doing in the case of OpenSUSE is using it to mount devices and then calling `switch_root` to
 start the systemd boot.
 
 For OpenSUSE, there is a directory called `opensuse` in the repository containing a script

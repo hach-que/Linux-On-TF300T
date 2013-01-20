@@ -24,7 +24,7 @@ sudo ./edisk
 This command handles setting up the environment and chrooting.  It is actually what is used
 during `buildos` in the initial build.
 
-**If all goes according to plan, you should now have an `update.zip` file in the `build` folder.
+**If all goes according to plan, you should now have an `update.zip` file in the `build` folder.**
 
-Continue onto [deployment](deployment.md)...
+Continue onto [deployment](deploy.md)...
 
