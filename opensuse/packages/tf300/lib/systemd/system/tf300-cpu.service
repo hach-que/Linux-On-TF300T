@@ -1,0 +1,15 @@
+[Unit]
+Description=Set Tegra parameters
+DefaultDependencies=no
+After=sysinit.target
+Before=shutdown.target
+Conflicts=shutdown.target
+TimeoutStartSec=20
+
+[Service]
+Type=oneshot
+ExecStart=/opt/tf300/cpu.sh
+StandardOutput=syslog
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,123 @@
+#!/bin/bash
+
+#
+# This script cooks the required packages and configuration into
+# the disk image.
+#
+
+if [ ! -d disk ]; then
+    echo "STOP: Disk directory does not exist.  Run ./deploy first."
+    exit 1
+fi
+
+if [ $UID -ne 0 ]; then
+    echo "STOP: This script must be run as root."
+    exit 1
+fi
+
+# Set the RPM source dir.
+RPM_SOURCE_DIR=/usr/src/packages/SOURCES/
+RPM_OUTPUT_DIR=/usr/src/packages/RPMS/armv7hl/
+
+# Create the cooking directory.
+if [ ! -d cookwd ]; then
+    mkdir cookwd
+fi
+if [ ! -d cookwd/srcdir ]; then
+    mkdir cookwd/srcdir
+fi
+if [ ! -d cookwd/pkgdir ]; then
+    mkdir cookwd/pkgdir
+fi
+datadir=$(pwd)/packages
+cookdir=$(pwd)/cookwd
+srcdir=$(pwd)/cookwd/srcdir
+pkgdir=$(pwd)/cookwd/pkgdir
+outdir=$(pwd)/build
+
+# Ensure RPMBUILD is installed.
+which rpmbuild >/dev/null 2>/dev/null
+if [ $? -ne 0 ]; then
+    echo "STOP: RPMBUILD must be installed first."
+    exit 1
+fi
+
+#### #### #### TEGRA START #### #### ####
+
+echo -e "\033[31m\033[1mCOOKING TEGRA DRIVERS...\033[0m"
+
+# Download required resources.
+pushd ${datadir}/nvidia-tegra3/ >/dev/null
+if [ ! -e cardhu_Tegra-Linux-R16.2.0_armhf.tbz2 ]; then
+    wget http://developer.download.nvidia.com/akamai/mobile/files/L4T/cardhu_Tegra-Linux-R16.2.0_armhf.tbz2
+fi
+if [ ! -e cardhu_Tegra-Linux-codecs-R16.2.0_armhf.tbz2 ]; then
+    wget http://developer.download.nvidia.com/akamai/mobile/files/L4T/cardhu_Tegra-Linux-codecs-R16.2.0_armhf.tbz2
+fi
+
+# Extract resources.
+pushd ${srcdir} >/dev/null
+tar -xf ${datadir}/nvidia-tegra3/cardhu_Tegra-Linux-R16.2.0_armhf.tbz2 -C ${srcdir}/
+tar -xf ${datadir}/nvidia-tegra3/cardhu_Tegra-Linux-codecs-R16.2.0_armhf.tbz2 -C ${srcdir}/
+
+# Copy data files.
+cp ${datadir}/nvidia-tegra3/10-tegra.conf ${srcdir}/10-tegra.conf
+cp ${datadir}/nvidia-tegra3/tegra.spec ${srcdir}/tegra.spec
+
+# Extract all of the Tegra content.
+tar -xf ${srcdir}/restricted_codecs.tbz2 -C ${pkgdir}/
+tar -xf ${srcdir}/Linux_for_Tegra/nv_tegra/nvidia_drivers.tbz2 -C ${pkgdir}/
+tar -xf ${srcdir}/Linux_for_Tegra/nv_tegra/nv_sample_apps/nvgstapps.tbz2 -C ${pkgdir}/
+pushd ${srcdir}/Linux_for_Tegra/nv_tegra >/dev/null
+tar -xf config.tbz2
+popd >/dev/null
+
+# Re-arrange the extracted content.
+pushd ${pkgdir}/usr/lib/xorg/modules/drivers >/dev/null
+mv tegra_drv.abi13.so tegra_drv.so
+rm tegra_drv.abi*
+popd >/dev/null
+pushd ${pkgdir} >/dev/null
+mkdir -p usr
+cp -R lib usr/
+rm -Rf lib
+rm usr/lib/libjpeg.so
+mkdir -p etc/X11/xorg.conf.d
+cp ${srcdir}/10-tegra.conf etc/X11/xorg.conf.d/
+mkdir -p ${pkgdir}/usr/lib/udev/rules.d/
+cp ${srcdir}/Linux_for_Tegra/nv_tegra/etc/udev/rules.d/99-tegra-devices.rules ${pkgdir}/usr/lib/udev/rules.d/
+popd >/dev/null
+
+# Create a tarball of the pkgdir for extracting during RPMBUILD.
+pushd ${pkgdir} >/dev/null
+tar -cf ${srcdir}/nvidia-tegra3.tar.gz etc usr
+popd >/dev/null
+cp ${srcdir}/nvidia-tegra3.tar.gz $RPM_SOURCE_DIR/
+rpmbuild --target armv7hl -ba ${srcdir}/tegra.spec
+mv $RPM_OUTPUT_DIR/nvidia-tegra* ${outdir}/nvidia-tegra.rpm
+
+# Pop directories.
+popd >/dev/null
+popd >/dev/null
+
+#### #### #### TF300T scripts and modules #### #### ####
+
+echo -e "\033[31m\033[1mCOOKING TF300T DRIVERS...\033[0m"
+
+# Create a tarball of the pkgdir for extracting during RPMBUILD.
+pushd ${datadir}/tf300 >/dev/null
+tar -cf ${srcdir}/tf300.tar.gz etc lib opt
+popd >/dev/null
+cp ${srcdir}/tf300.tar.gz $RPM_SOURCE_DIR/
+rpmbuild --target armv7hl -ba ${datadir}/tf300/tf300.spec
+mv $RPM_OUTPUT_DIR/tf300* ${outdir}/tf300.rpm
+
+#### #### #### END #### #### ####
+
+# Clean up packaging and source directories, if we succeeded.
+if [ -e ${outdir}/nvidia-tegra.rpm ] && [ -e ${outdir}/tf300.rpm ]; then
+    rm -R ${cookdir}/*
+    rmdir ${cookdir}
+fi
+
+exit 0

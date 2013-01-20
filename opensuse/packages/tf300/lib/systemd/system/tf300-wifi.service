@@ -1,0 +1,15 @@
+[Unit]
+Description=Copy WiFi nvram data
+DefaultDependencies=no
+After=sysinit.target
+Before=shutdown.target
+Conflicts=shutdown.target
+TimeoutStartSec=20
+
+[Service]
+Type=oneshot
+ExecStart=/opt/tf300/copy_wifi_nvram.sh
+StandardOutput=syslog
+
+[Install]
+WantedBy=multi-user.target

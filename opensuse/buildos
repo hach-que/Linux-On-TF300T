@@ -19,7 +19,7 @@ if [ ! -e kernel.blob ]; then
 fi
 
 # Build the disk image if it doesn't already exist.
-if [ -e rootfs.tar.xz ] || [ "$REBUILD_DISK" == "true" ]; then
+if [ -e rootfs.tar.xz ] && [ "$REBUILD_DISK" != "true" ]; then
     echo "SKIP: Not rebuilding rootfs; it already exists (set REBUILD_DISK to force)."
 else
     popd >/dev/null
@@ -47,6 +47,8 @@ fi
 # Create update ZIP.
 echo "Creating update.zip..."
 cp -R ../update ./
+rm update/kernel.blob 2>/dev/null
+rm update/rootfs.tar.xz 2>/dev/null
 ln kernel.blob update/
 ln rootfs.tar.xz update/
 pushd update >/dev/null

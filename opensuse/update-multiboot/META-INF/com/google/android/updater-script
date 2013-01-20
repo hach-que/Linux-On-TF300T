@@ -1,0 +1,3 @@
+assert(getprop("ro.product.device") == "tf300t" || getprop("ro.build.product") == "tf300t");
+package_extract_file("kernel.blob", "/dev/block/mmcblk0p4");
+show_progress(0.100000, 0);

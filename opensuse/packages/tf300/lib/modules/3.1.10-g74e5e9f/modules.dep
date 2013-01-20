@@ -1,0 +1,12 @@
+sch_codel.ko: compat.ko
+lib80211_crypt_ccmp.ko: lib80211.ko compat.ko
+brcmfmac.ko: cfg80211.ko brcmutil.ko compat.ko
+cfg80211.ko: compat.ko
+sch_fq_codel.ko: compat.ko
+cardhu_wifi.ko:
+lib80211_crypt_wep.ko: lib80211.ko compat.ko
+brcmutil.ko:
+lib80211_crypt_tkip.ko: lib80211.ko compat.ko
+lib80211.ko: compat.ko
+mac80211.ko: cfg80211.ko compat.ko
+compat.ko:

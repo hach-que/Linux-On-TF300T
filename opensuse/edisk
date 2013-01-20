@@ -35,7 +35,7 @@ cp /etc/resolv.conf etc/
 
 # Enter chroot.
 echo "edisk: Entering chroot.  Enjoy!"
-chroot .
+chroot . $*
 
 # Disable bind mounts.
 echo "edisk: Stopping bind mounts..."

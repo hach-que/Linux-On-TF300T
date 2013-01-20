@@ -1,0 +1,9 @@
+# Aliases extracted from modules themselves.
+alias usb:v0A5Cp0BDCd*dc*dsc*dp*ic*isc*ip* brcmfmac
+alias usb:v0A5CpBD1Fd*dc*dsc*dp*ic*isc*ip* brcmfmac
+alias usb:v0A5CpBD17d*dc*dsc*dp*ic*isc*ip* brcmfmac
+alias usb:v0A5CpBD1Ed*dc*dsc*dp*ic*isc*ip* brcmfmac
+alias sdio:c*v02D0d4334* brcmfmac
+alias sdio:c*v02D0d4330* brcmfmac
+alias sdio:c*v02D0d4329* brcmfmac
+alias sdio:c*v02D0d4324* brcmfmac

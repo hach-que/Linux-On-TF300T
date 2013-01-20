@@ -1,0 +1,37 @@
+#!/bin/bash
+
+#
+# This script will build the Multiboot update.zip for OpenSUSE.  This
+# is an alternative update.zip that simply updates the staging partition
+# to have the OpenSUSE bootloader on it.
+#
+
+if [ ! -d build ]; then
+    echo "STOP: Build directory does not exist.  Run ./prepare first."
+    exit 1
+fi
+
+# Enter the build directory.
+pushd build >/dev/null
+
+# Check to make sure kernel and initrd exist.
+if [ ! -e kernel.blob ]; then
+    echo "STOP: Blob is not built.  Run ./prepare before deployment."
+    exit 1
+fi
+
+# Create update ZIP.
+echo "Creating opensuse-multiboot.zip (multiboot)..."
+cp -R ../update-multiboot ./update
+ln kernel.blob update/
+pushd update >/dev/null
+zip -r ../opensuse-multiboot.zip * 
+popd >/dev/null
+rm -Rf update
+
+echo "Done! opensuse-multiboot.zip can now be transferred to the device using ADB or other means."
+echo "Use ClockworkMod Recovery to switch to booting OpenSUSE by applying the opensuse-multiboot.zip."
+
+popd >/dev/null
+
+exit 0
