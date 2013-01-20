@@ -1,5 +1,7 @@
 # Ignore build directories.
 build
+opensuse/disk
+opensuse/openSUSE-12.2-ARM-JeOS-rootfs.armv7l.tbz
 
 # Ignore binaries.
 *.o

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #
-# This script will deploy the prepared image to the TF300T.
+# This script will build the OpenSUSE update.zip.
 #
 
 if [ ! -d build ]; then
@@ -11,25 +11,6 @@ fi
 
 # Enter the build directory.
 pushd build >/dev/null
-
-# Check to see if fastboot is in the PATH or FASTBOOT environment variable is set.
-#if [ "$FASTBOOT" == "" ]; then
-#    which fastboot >/dev/null 2>/dev/null
-#    if [ $? -ne 0 ]; then
-#        echo "STOP: fastboot not found.  Set the FASTBOOT environment variable to point to it."
-#        popd >/dev/null
-#        exit 1
-#    fi
-#
-#    # It's in the PATH
-#    FASTBOOT=fastboot
-#else
-#    if [ ! -e $FASTBOOT ]; then
-#        echo "STOP: '$FASTBOOT' not found.  Set the FASTBOOT to the correct program."
-#        popd >/dev/null
-#        exit 1
-#    fi
-#fi
 
 # Check to make sure kernel and initrd exist.
 if [ ! -e kernel.blob ]; then
@@ -75,11 +56,6 @@ rm -Rf update
 
 echo "Done! update.zip can now be transferred to the device using ADB or other means."
 echo "Use ClockworkMod Recovery to install the update.zip."
-
-# Perform deployment.
-#echo "Performing deployment..."
-#sudo $FASTBOOT -i 0x0B05 flash staging kernel.blob
-#sudo $FASTBOOT -i 0x0B05 reboot
 
 popd >/dev/null
 
