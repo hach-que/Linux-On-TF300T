@@ -18,8 +18,7 @@ General steps (start here)
 Distribution-specific steps
 -------------------------------
 
-OpenSUSE 12.2
-~~~~~~~~~~~~~~~~~
+### OpenSUSE 12.2
 
   1. [Preperation](general/prepare.md)
   2. [Building](general/build.md)
