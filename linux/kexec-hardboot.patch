@@ -1,0 +1,569 @@
+From 51d308e794d077b60d193fae5f03d1d6fcd63fa2 Mon Sep 17 00:00:00 2001
+From: Mike Kasick <mike@kasick.org>
+Date: Tue, 27 Nov 2012 16:39:12 +0100
+Subject: [PATCH] Add support for kexec-hardboot
+
+"Allows hard booting (i.e., with a full hardware reboot) to a kernel
+previously loaded in memory by kexec.  This works around the problem of
+soft-booted kernel hangs due to improper device shutdown and/or
+reinitialization."
+More info in /arch/arm/Kconfig.
+
+Original author: Mike Kasick <mike@kasick.org>
+These patches are ported from Asus TF201, to which it
+was ported by Jens Andersen <jens.andersen@gmail.com>.
+
+Change-Id: Ibee734f61ffa97577bfbcdd9a8cd567bd2d89f32
+---
+ arch/arm/Kconfig                               |   26 ++++++++
+ arch/arm/boot/compressed/Makefile              |    3 +
+ arch/arm/boot/compressed/head.S                |   76 +++++++++++++++++++++++-
+ arch/arm/boot/compressed/misc.c                |   23 +++++++
+ arch/arm/configs/cyanogenmod_grouper_defconfig |    4 +-
+ arch/arm/include/asm/kexec.h                   |    8 +++
+ arch/arm/kernel/machine_kexec.c                |   25 +++++++-
+ arch/arm/kernel/relocate_kernel.S              |   47 +++++++++++++++
+ arch/arm/mach-tegra/common.c                   |    9 ++-
+ arch/arm/mach-tegra/include/mach/memory.h      |   12 ++++
+ arch/arm/mach-tegra/reset.c                    |   23 +++++++
+ include/linux/kexec.h                          |   19 +++++-
+ kernel/kexec.c                                 |    4 ++
+ 13 files changed, 270 insertions(+), 9 deletions(-)
+
+diff --git a/arch/arm/Kconfig b/arch/arm/Kconfig
+index 3c3b868..5903cec 100644
+--- a/arch/arm/Kconfig
++++ b/arch/arm/Kconfig
+@@ -1993,6 +1993,32 @@ config ATAGS_PROC
+ 	  Should the atags used to boot the kernel be exported in an "atags"
+ 	  file in procfs. Useful with kexec.
+ 
++config KEXEC_HARDBOOT
++	bool "Support hard booting to a kexec kernel"
++	depends on KEXEC
++	help
++	  Allows hard booting (i.e., with a full hardware reboot) to a kernel
++	  previously loaded in memory by kexec.  This works around the problem of
++	  soft-booted kernel hangs due to improper device shutdown and/or
++	  reinitialization.  Support is comprised of two components:
++
++	  First, a "hardboot" flag is added to the kexec syscall to force a hard
++	  reboot in relocate_new_kernel() (which requires machine-specific assembly
++	  code).  This also requires the kexec userspace tool to load the kexec'd
++	  kernel in memory region left untouched by the bootloader (i.e., not
++	  explicitly cleared and not overwritten by the boot kernel).  Just prior
++	  to reboot, the kexec kernel arguments are stashed in a machine-specific
++	  memory page that must also be preserved.  Note that this hardboot page
++	  need not be reserved during regular kernel execution.
++
++	  Second, the zImage decompresor of the boot (bootloader-loaded) kernel is
++	  modified to check the hardboot page for fresh kexec arguments, and if
++	  present, attempts to jump to the kexec'd kernel preserved in memory.
++
++	  Note that hardboot support is only required in the boot kernel and any
++	  kernel capable of performing a hardboot kexec.  It is _not_ required by a
++	  kexec'd kernel.
++
+ config CRASH_DUMP
+ 	bool "Build kdump crash kernel (EXPERIMENTAL)"
+ 	depends on EXPERIMENTAL
+diff --git a/arch/arm/boot/compressed/Makefile b/arch/arm/boot/compressed/Makefile
+index 0c74a6f..7643b37 100644
+--- a/arch/arm/boot/compressed/Makefile
++++ b/arch/arm/boot/compressed/Makefile
+@@ -111,6 +111,9 @@ endif
+ ifeq ($(CONFIG_CPU_ENDIAN_BE8),y)
+ LDFLAGS_vmlinux += --be8
+ endif
++ifneq ($(PARAMS_PHYS),)
++LDFLAGS_vmlinux += --defsym params_phys=$(PARAMS_PHYS)
++endif
+ # ?
+ LDFLAGS_vmlinux += -p
+ # Report unresolved symbol references
+diff --git a/arch/arm/boot/compressed/head.S b/arch/arm/boot/compressed/head.S
+index 24701d6..f3f5a9a 100644
+--- a/arch/arm/boot/compressed/head.S
++++ b/arch/arm/boot/compressed/head.S
+@@ -9,6 +9,11 @@
+  * published by the Free Software Foundation.
+  */
+ #include <linux/linkage.h>
++#include <asm/memory.h>
++
++#ifdef CONFIG_KEXEC_HARDBOOT
++  #include <asm/kexec.h>
++#endif
+ 
+ /*
+  * Debugging stuff
+@@ -133,7 +138,31 @@ start:
+ 		.word	_edata			@ zImage end address
+  THUMB(		.thumb			)
+ 1:		mov	r7, r1			@ save architecture ID
+-		mov	r8, r2			@ save atags pointer
++		teq  r0, #0			@ Check for kexec_boot_atags.
++		movne  r8, r0		@ Save kexec_boot_tags.
++		moveq  r8, r2		@ save atags pointer
++
++#ifdef CONFIG_KEXEC_HARDBOOT
++		/* Check hardboot page for a kexec kernel. */
++		ldr	r3, =KEXEC_HB_PAGE_ADDR
++		ldr	r0, [r3]
++		ldr	r1, =KEXEC_HB_PAGE_MAGIC
++		teq	r0, r1
++		bne	not_booting_other
++
++		/* Clear hardboot page magic to avoid boot loop. */
++		mov	r0, #0
++		str	r0, [r3]
++
++		/* Load boot arguments and jump to kexec kernel. */
++		ldr	r0, [r3, #12]	@ kexec_boot_atags (r2: boot_atags)
++		ldr	r1, [r3, #8]	@ kexec_mach_type
++		ldr	pc, [r3, #4]	@ kexec_start_address
++
++		.ltorg
++
++not_booting_other:
++#endif
+ 
+ #ifndef __ARM_ARCH_2__
+ 		/*
+@@ -348,6 +377,44 @@ not_relocated:	mov	r0, #0
+ 		add	r2, sp, #0x10000	@ 64k max
+ 		mov	r3, r7
+ 		bl	decompress_kernel
++
++/* Copy the kernel tagged list (atags):
++ *
++ * The kernel requires atags to be located in a direct-mapped region,
++ * usually below the kernel in the first 16 kB of RAM.  If they're above
++ * (the start of) the kernel, they need to be copied to a suitable
++ * location, e.g., the machine-defined params_phys.
++ *
++ * The assumption is that the tags will only be "out of place" if the
++ * decompressor code is also, so copying is implemented only in the "won't
++ * overwrite" case (which should be fixed).  Still need to make sure that
++ * the copied tags don't overwrite either the kernel or decompressor code
++ * (or rather, the remainder of it since everything up to here has already
++ * been executed).
++ *
++ * r4: zreladdr (kernel start)
++ * r8: atags */
++
++		/* Don't need to copy atags if they're already below the kernel. */
++		cmp	r8, r4
++		blo	call_kernel
++
++		/* r1: min(zreladdr, pc) */
++		mov	r1, pc
++		cmp	r4, r1
++		movlo	r1, r4
++
++		/* Compute max space for atags, if max <= 0 don't copy. */
++		ldr	r0, =params_phys	@ dest
++		subs	r2, r1, r0		@ max = min(zreladdr, pc) - dest
++		bls	call_kernel
++
++		/* Copy atags to params_phys. */
++		mov	r1, r8			@ src
++		bl	copy_atags
++		mov	r8, r0
++
++call_kernel:
+ 		bl	cache_clean_flush
+ 		bl	cache_off
+ 		mov	r0, #0			@ must be zero
+@@ -356,6 +423,8 @@ not_relocated:	mov	r0, #0
+  ARM(		mov	pc, r4	)		@ call kernel
+  THUMB(		bx	r4	)		@ entry point is always ARM
+ 
++		.ltorg
++
+ 		.align	2
+ 		.type	LC0, #object
+ LC0:		.word	LC0			@ r1
+@@ -467,9 +536,14 @@ __setup_mmu:	sub	r3, r4, #16384		@ Page directory size
+  * bits for the RAM area only.
+  */
+ 		mov	r0, r3
++#if defined(PLAT_PHYS_OFFSET) && defined(END_MEM)
++		mov  r9, #PLAT_PHYS_OFFSET  @ start of RAM
++		ldr  r10, =END_MEM    @ end of RAM
++#else
+ 		mov	r9, r0, lsr #18
+ 		mov	r9, r9, lsl #18		@ start of RAM
+ 		add	r10, r9, #0x10000000	@ a reasonable RAM size
++#endif
+ 		mov	r1, #0x12
+ 		orr	r1, r1, #3 << 10
+ 		add	r2, r3, #16384
+diff --git a/arch/arm/boot/compressed/misc.c b/arch/arm/boot/compressed/misc.c
+index 832d372..f1ce0ef 100644
+--- a/arch/arm/boot/compressed/misc.c
++++ b/arch/arm/boot/compressed/misc.c
+@@ -25,6 +25,7 @@
+ #include <linux/stddef.h>	/* for NULL */
+ #include <linux/linkage.h>
+ #include <asm/string.h>
++#include <asm/setup.h>
+ 
+ 
+ static void putstr(const char *ptr);
+@@ -192,3 +193,25 @@ asmlinkage void __div0(void)
+ 	else
+ 		putstr(" done, booting the kernel.\n");
+ }
++
++const struct tag *copy_atags(struct tag *dest, const struct tag *src,
++                             size_t max)
++{
++	struct tag *tag;
++	size_t      size;
++
++	/* Find the last tag (ATAG_NONE). */
++	for_each_tag(tag, (struct tag *)src)
++		continue;
++
++	/* Include the last tag in copy. */
++	size = (char *)tag - (char *)src + sizeof(struct tag_header);
++
++	/* If there's not enough room, just use original and hope it works. */
++	if (size > max)
++		return src;
++
++	memcpy(dest, src, size);
++
++	return dest;
++}
+diff --git a/arch/arm/configs/cyanogenmod_grouper_defconfig b/arch/arm/configs/cyanogenmod_grouper_defconfig
+index a496ee6..347dba2 100644
+--- a/arch/arm/configs/cyanogenmod_grouper_defconfig
++++ b/arch/arm/configs/cyanogenmod_grouper_defconfig
+@@ -484,7 +484,9 @@ CONFIG_CMDLINE="tegra_wdt.heartbeat=30"
+ CONFIG_CMDLINE_EXTEND=y
+ # CONFIG_CMDLINE_FORCE is not set
+ # CONFIG_XIP_KERNEL is not set
+-# CONFIG_KEXEC is not set
++CONFIG_KEXEC=y
++CONFIG_ATAGS_PROC=y
++CONFIG_KEXEC_HARDBOOT=y
+ # CONFIG_CRASH_DUMP is not set
+ # CONFIG_AUTO_ZRELADDR is not set
+ 
+diff --git a/arch/arm/include/asm/kexec.h b/arch/arm/include/asm/kexec.h
+index c2b9b4b..564c55b 100644
+--- a/arch/arm/include/asm/kexec.h
++++ b/arch/arm/include/asm/kexec.h
+@@ -17,6 +17,10 @@
+ #define KEXEC_ARM_ATAGS_OFFSET  0x1000
+ #define KEXEC_ARM_ZIMAGE_OFFSET 0x8000
+ 
++#ifdef CONFIG_KEXEC_HARDBOOT
++  #define KEXEC_HB_PAGE_MAGIC 0x4a5db007
++#endif
++
+ #ifndef __ASSEMBLY__
+ 
+ /**
+@@ -53,6 +57,10 @@ static inline void crash_setup_regs(struct pt_regs *newregs,
+ /* Function pointer to optional machine-specific reinitialization */
+ extern void (*kexec_reinit)(void);
+ 
++#ifdef CONFIG_KEXEC_HARDBOOT
++extern void (*kexec_hardboot_hook)(void);
++#endif
++
+ #endif /* __ASSEMBLY__ */
+ 
+ #endif /* CONFIG_KEXEC */
+diff --git a/arch/arm/kernel/machine_kexec.c b/arch/arm/kernel/machine_kexec.c
+index e59bbd4..812c0cb 100644
+--- a/arch/arm/kernel/machine_kexec.c
++++ b/arch/arm/kernel/machine_kexec.c
+@@ -22,6 +22,10 @@
+ extern unsigned long kexec_indirection_page;
+ extern unsigned long kexec_mach_type;
+ extern unsigned long kexec_boot_atags;
++#ifdef CONFIG_KEXEC_HARDBOOT
++extern unsigned long kexec_hardboot;
++void (*kexec_hardboot_hook)(void);
++#endif
+ 
+ static atomic_t waiting_for_crash_ipi;
+ 
+@@ -99,6 +103,9 @@ void machine_kexec(struct kimage *image)
+ 	kexec_indirection_page = page_list;
+ 	kexec_mach_type = machine_arch_type;
+ 	kexec_boot_atags = image->start - KEXEC_ARM_ZIMAGE_OFFSET + KEXEC_ARM_ATAGS_OFFSET;
++#ifdef CONFIG_KEXEC_HARDBOOT
++	kexec_hardboot = image->hardboot;
++#endif
+ 
+ 	/* copy our kernel relocation code to the control code page */
+ 	memcpy(reboot_code_buffer,
+@@ -114,11 +121,23 @@ void machine_kexec(struct kimage *image)
+ 	local_irq_disable();
+ 	local_fiq_disable();
+ 	setup_mm_for_reboot(0); /* mode is not used, so just pass 0*/
++
++#ifdef CONFIG_KEXEC_HARDBOOT
++	/* Run any final machine-specific shutdown code. */
++	if (image->hardboot && kexec_hardboot_hook)
++		kexec_hardboot_hook();
++#endif
++
+ 	flush_cache_all();
+ 	outer_flush_all();
+ 	outer_disable();
+ 	cpu_proc_fin();
+-	outer_inv_all();
+-	flush_cache_all();
+-	cpu_reset(reboot_code_buffer_phys);
++
++	// Freezes the tegra 3
++	//outer_inv_all();
++	//flush_cache_all();
++
++	/* Must call cpu_reset via physical address since ARMv7 (& v6) stalls the
++	 * pipeline after disabling the MMU. */
++	((typeof(cpu_reset) *)virt_to_phys(cpu_reset))(reboot_code_buffer_phys);
+ }
+diff --git a/arch/arm/kernel/relocate_kernel.S b/arch/arm/kernel/relocate_kernel.S
+index d0cdedf..98e0a89 100644
+--- a/arch/arm/kernel/relocate_kernel.S
++++ b/arch/arm/kernel/relocate_kernel.S
+@@ -4,6 +4,13 @@
+ 
+ #include <asm/kexec.h>
+ 
++#ifdef CONFIG_KEXEC_HARDBOOT
++#include <asm/memory.h>
++#if defined(CONFIG_ARCH_TEGRA_2x_SOC) || defined(CONFIG_ARCH_TEGRA_3x_SOC)
++  #include <mach/iomap.h>
++#endif
++#endif
++
+ 	.globl relocate_new_kernel
+ relocate_new_kernel:
+ 
+@@ -52,6 +59,12 @@ relocate_new_kernel:
+ 	b 0b
+ 
+ 2:
++#ifdef CONFIG_KEXEC_HARDBOOT
++	ldr	r0, kexec_hardboot
++	teq	r0, #0
++	bne	hardboot
++#endif
++
+ 	/* Jump to relocated kernel */
+ 	mov lr,r1
+ 	mov r0,#0
+@@ -60,6 +73,34 @@ relocate_new_kernel:
+  ARM(	mov pc, lr	)
+  THUMB(	bx lr		)
+ 
++#ifdef CONFIG_KEXEC_HARDBOOT
++hardboot:
++	/* Stash boot arguments in hardboot page:
++	 *  0: KEXEC_HB_PAGE_MAGIC
++	 *  4: kexec_start_address
++	 *  8: kexec_mach_type
++	 * 12: kexec_boot_atags */
++	ldr	r0, =KEXEC_HB_PAGE_ADDR
++	str	r1, [r0, #4]
++	ldr	r1, kexec_mach_type
++	str	r1, [r0, #8]
++	ldr	r1, kexec_boot_atags
++	str	r1, [r0, #12]
++	ldr	r1, =KEXEC_HB_PAGE_MAGIC
++	str	r1, [r0]
++
++#if defined(CONFIG_ARCH_TEGRA_2x_SOC) || defined(CONFIG_ARCH_TEGRA_3x_SOC)
++	ldr     r0, =TEGRA_PMC_BASE
++	ldr	r1, [r0]
++	orr	r1, r1, #0x10
++	str	r1, [r0]
++loop:	b	loop
++#else
++#error "No reboot method defined for hardboot."
++#endif
++
++	.ltorg
++#endif
+ 	.align
+ 
+ 	.globl kexec_start_address
+@@ -79,6 +120,12 @@ kexec_mach_type:
+ kexec_boot_atags:
+ 	.long	0x0
+ 
++#ifdef CONFIG_KEXEC_HARDBOOT
++	.globl kexec_hardboot
++kexec_hardboot:
++	.long	0x0
++#endif
++
+ relocate_new_kernel_end:
+ 
+ 	.globl relocate_new_kernel_size
+diff --git a/arch/arm/mach-tegra/common.c b/arch/arm/mach-tegra/common.c
+index d91ad83..89dede3 100755
+--- a/arch/arm/mach-tegra/common.c
++++ b/arch/arm/mach-tegra/common.c
+@@ -961,13 +961,20 @@ void __init tegra_ram_console_debug_reserve(unsigned long ram_console_size)
+ {
+ 	struct resource *res;
+ 	long ret;
++	unsigned long real_start, real_size;
+ 
+ 	res = platform_get_resource(&ram_console_device, IORESOURCE_MEM, 0);
+ 	if (!res)
+ 		goto fail;
++
+ 	res->start = memblock_end_of_DRAM() - ram_console_size;
+ 	res->end = res->start + ram_console_size - 1;
+-	ret = memblock_remove(res->start, ram_console_size);
++
++	// Register an extra 1M before ramconsole to store kexec stuff
++	real_start = res->start - SZ_1M;
++	real_size = ram_console_size + SZ_1M;
++
++	ret = memblock_remove(real_start, real_size);
+ 	if (ret)
+ 		goto fail;
+ 
+diff --git a/arch/arm/mach-tegra/include/mach/memory.h b/arch/arm/mach-tegra/include/mach/memory.h
+index 5f51066..84dd44e 100644
+--- a/arch/arm/mach-tegra/include/mach/memory.h
++++ b/arch/arm/mach-tegra/include/mach/memory.h
+@@ -29,6 +29,18 @@
+ #define PLAT_PHYS_OFFSET		UL(0x80000000)
+ #endif
+ 
++#if defined(CONFIG_MACH_GROUPER)
++#define END_MEM		            UL(0xBEA00000)
++#endif
++
++#if defined(CONFIG_KEXEC_HARDBOOT)
++#if defined(CONFIG_MACH_GROUPER)
++#define KEXEC_HB_PAGE_ADDR		UL(0xBEA00000)
++#else
++#error "Adress for kexec hardboot page not defined"
++#endif
++#endif
++
+ /*
+  * Unaligned DMA causes tegra dma to place data on 4-byte boundary after
+  * expected address. Call to skb_reserve(skb, NET_IP_ALIGN) was causing skb
+diff --git a/arch/arm/mach-tegra/reset.c b/arch/arm/mach-tegra/reset.c
+index 3ab2c13..d91ba95 100644
+--- a/arch/arm/mach-tegra/reset.c
++++ b/arch/arm/mach-tegra/reset.c
+@@ -27,6 +27,10 @@
+ #include "sleep.h"
+ #include "pm.h"
+ 
++#ifdef CONFIG_KEXEC_HARDBOOT
++#include <asm/kexec.h>
++#endif
++
+ static bool is_enabled;
+ 
+ static void tegra_cpu_reset_handler_enable(void)
+@@ -88,6 +92,21 @@ void tegra_cpu_reset_handler_restore(void)
+ }
+ #endif
+ 
++#ifdef CONFIG_KEXEC_HARDBOOT
++#define RECOVERY_MODE	BIT(31)
++void tegra_kexec_hardboot(void)
++{
++	/* Reboot with the recovery kernel since the boot kernel decompressor may
++	 * not support the hardboot jump. */
++
++	void __iomem *reset = IO_ADDRESS(TEGRA_PMC_BASE + 0x00);
++
++	u32 reg = readl_relaxed(reset + PMC_SCRATCH0);
++	reg |= RECOVERY_MODE;
++	writel_relaxed(reg, reset + PMC_SCRATCH0);
++}
++#endif
++
+ void __init tegra_cpu_reset_handler_init(void)
+ {
+ #ifdef CONFIG_SMP
+@@ -112,4 +131,8 @@ void __init tegra_cpu_reset_handler_init(void)
+ 			  __pa(&__tegra_cpu_reset_handler_data[TEGRA_RESET_DATA_SIZE]));
+ 
+ 	tegra_cpu_reset_handler_enable();
++
++#ifdef CONFIG_KEXEC_HARDBOOT
++	kexec_hardboot_hook = tegra_kexec_hardboot;
++#endif
+ }
+diff --git a/include/linux/kexec.h b/include/linux/kexec.h
+index c2478a3..e0f1cee 100644
+--- a/include/linux/kexec.h
++++ b/include/linux/kexec.h
+@@ -101,6 +101,10 @@ struct kimage {
+ #define KEXEC_TYPE_CRASH   1
+ 	unsigned int preserve_context : 1;
+ 
++#ifdef CONFIG_KEXEC_HARDBOOT
++	unsigned int hardboot : 1;
++#endif
++
+ #ifdef ARCH_HAS_KIMAGE_ARCH
+ 	struct kimage_arch arch;
+ #endif
+@@ -165,6 +169,11 @@ void vmcoreinfo_append_str(const char *fmt, ...)
+ 
+ #define KEXEC_ON_CRASH		0x00000001
+ #define KEXEC_PRESERVE_CONTEXT	0x00000002
++
++#ifdef CONFIG_KEXEC_HARDBOOT
++#define KEXEC_HARDBOOT		0x00000004
++#endif
++
+ #define KEXEC_ARCH_MASK		0xffff0000
+ 
+ /* These values match the ELF architecture values.
+@@ -183,10 +192,14 @@ void vmcoreinfo_append_str(const char *fmt, ...)
+ #define KEXEC_ARCH_MIPS    ( 8 << 16)
+ 
+ /* List of defined/legal kexec flags */
+-#ifndef CONFIG_KEXEC_JUMP
+-#define KEXEC_FLAGS    KEXEC_ON_CRASH
+-#else
++#if defined(CONFIG_KEXEC_JUMP) && defined(CONFIG_KEXEC_HARDBOOT)
++#define KEXEC_FLAGS    (KEXEC_ON_CRASH | KEXEC_PRESERVE_CONTEXT | KEXEC_HARDBOOT)
++#elif defined(CONFIG_KEXEC_JUMP)
+ #define KEXEC_FLAGS    (KEXEC_ON_CRASH | KEXEC_PRESERVE_CONTEXT)
++#elif defined(CONFIG_KEXEC_HARDBOOT)
++#define KEXEC_FLAGS    (KEXEC_ON_CRASH | KEXEC_HARDBOOT)
++#else
++#define KEXEC_FLAGS    (KEXEC_ON_CRASH)
+ #endif
+ 
+ #define VMCOREINFO_BYTES           (4096)
+diff --git a/kernel/kexec.c b/kernel/kexec.c
+index 296fbc8..2e2f1df 100644
+--- a/kernel/kexec.c
++++ b/kernel/kexec.c
+@@ -1005,6 +1005,10 @@ static int kimage_load_segment(struct kimage *image,
+ 
+ 		if (flags & KEXEC_PRESERVE_CONTEXT)
+ 			image->preserve_context = 1;
++#ifdef CONFIG_KEXEC_HARDBOOT
++		if (flags & KEXEC_HARDBOOT)
++			image->hardboot = 1;
++#endif
+ 		result = machine_kexec_prepare(image);
+ 		if (result)
+ 			goto out;
+-- 
+1.7.10
+

@@ -1,0 +1,6 @@
+# Ignore build directories.
+build
+
+# Ignore binaries.
+*.o
+*.a

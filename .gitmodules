@@ -1,3 +1,6 @@
 [submodule "linux/kernel-tf300t"]
 	path = linux/kernel-tf300t
 	url = git@bitbucket.org:cb22/tf300tg-kernel-source.git
+[submodule "android/blobpack"]
+	path = android/blobpack
+	url = git://github.com/drwowe/BlobTools.git

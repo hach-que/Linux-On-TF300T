@@ -1,0 +1,86 @@
+#!/bin/bash
+
+#
+# This script will deploy the prepared image to the TF300T.
+#
+
+if [ ! -d build ]; then
+    echo "STOP: Build directory does not exist.  Run ./prepare first."
+    exit 1
+fi
+
+# Enter the build directory.
+pushd build >/dev/null
+
+# Check to see if fastboot is in the PATH or FASTBOOT environment variable is set.
+#if [ "$FASTBOOT" == "" ]; then
+#    which fastboot >/dev/null 2>/dev/null
+#    if [ $? -ne 0 ]; then
+#        echo "STOP: fastboot not found.  Set the FASTBOOT environment variable to point to it."
+#        popd >/dev/null
+#        exit 1
+#    fi
+#
+#    # It's in the PATH
+#    FASTBOOT=fastboot
+#else
+#    if [ ! -e $FASTBOOT ]; then
+#        echo "STOP: '$FASTBOOT' not found.  Set the FASTBOOT to the correct program."
+#        popd >/dev/null
+#        exit 1
+#    fi
+#fi
+
+# Check to make sure kernel and initrd exist.
+if [ ! -e kernel.blob ]; then
+    echo "STOP: Blob is not built.  Run ./prepare before deployment."
+    exit 1
+fi
+
+# Build the disk image if it doesn't already exist.
+if [ -e rootfs.tar.xz ] || [ "$REBUILD_DISK" == "true" ]; then
+    echo "SKIP: Not rebuilding rootfs; it already exists (set REBUILD_DISK to force)."
+else
+    popd >/dev/null
+    if [ ! -e openSUSE-12.2-ARM-JeOS-rootfs.armv7l.tbz ]; then
+        echo "Downloading OpenSUSE ARM base image..."
+        wget http://download.opensuse.org/ports/armv7hl/distribution/openSUSE-stable/images/openSUSE-12.2-ARM-JeOS-rootfs.armv7l.tbz
+    fi
+    if [ ! -d disk ]; then
+        echo "Unpacking OpenSUSE ARM base image... (this needs root to maintain permissions and modes)"
+        sudo tar xvjf openSUSE-12.2-ARM-JeOS-rootfs.armv7l.tbz -C disk
+    fi
+    echo "Now you need to prepare the base environment with the setup you desire."
+    echo "You will now be chroot'd into the envionment; hit ^D to continue deployment."
+    sudo ./edisk
+    echo "Preparing tarball of disk image..."
+    pushd disk >/dev/null
+    sudo tar -cf ../build/rootfs.tar .
+    popd >/dev/null
+    echo "Compressing tarball into XZ..."
+    pushd build >/dev/null
+    rm rootfs.tar.xz
+    xz -vv rootfs.tar
+fi
+
+# Create update ZIP.
+echo "Creating update.zip..."
+cp -R ../update ./
+ln kernel.blob update/
+ln rootfs.tar.xz update/
+pushd update >/dev/null
+zip -r ../update.zip * 
+popd >/dev/null
+rm -Rf update
+
+echo "Done! update.zip can now be transferred to the device using ADB or other means."
+echo "Use ClockworkMod Recovery to install the update.zip."
+
+# Perform deployment.
+#echo "Performing deployment..."
+#sudo $FASTBOOT -i 0x0B05 flash staging kernel.blob
+#sudo $FASTBOOT -i 0x0B05 reboot
+
+popd >/dev/null
+
+exit 0

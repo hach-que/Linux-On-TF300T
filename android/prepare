@@ -15,15 +15,20 @@ if [ ! -d build ]; then
 fi
 
 # Build the tools.
-pushd libmincrypt && \
+pushd libmincrypt >/dev/null && \
 gcc -c *.c -I../include && \
 ar rcs libmincrypt.a *.o && \
-popd && \
-pushd mkbootimg && \
+popd >/dev/null && \
+pushd mkbootimg >/dev/null && \
 gcc mkbootimg.c -o mkbootimg -I../include ../libmincrypt/libmincrypt.a && \
-popd
+popd >/dev/null && \
+pushd blobpack >/dev/null && \
+make && \
+popd >/dev/null
 
 # Move the result into the build directory.
 mv mkbootimg/mkbootimg build/mkbootimg
+cp blobpack/blobpack build/blobpack
+cp blobpack/blobunpack build/blobunpack
 
 exit 0

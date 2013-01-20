@@ -1,0 +1,22 @@
+ui_print("Starting installation of OpenSUSE 12.2 ARM...");
+ui_print("This script is for the TF300T.");
+ui_print("------------------------------------------");
+
+ui_print("Copying root FS...");
+show_progress(0.200000, 20);
+package_extract_file("rootfs.tar.xz", "/tmp/rootfs.tar.xz");
+
+ui_print("Copying installation script...")
+package_extract_file("install.sh", "/tmp/install.sh");
+
+ui_print("Extracting root FS... (this may take some time!)")
+show_progress(0.400000, 70);
+set_perm(0, 0, 755, "/tmp/install.sh");
+run_program("/tmp/install.sh");
+
+ui_print("Writing staging kernel...")
+package_extract_file("kernel.blob", "/tmp/kernel.blob");
+write_raw_image("/tmp/kernel.blob", "staging");
+
+ui_print("Installation complete!")
+set_progress(1.000000);

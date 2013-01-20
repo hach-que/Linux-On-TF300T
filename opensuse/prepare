@@ -64,6 +64,7 @@ pushd build >/dev/null
 # Check to see if that worked.
 if [ ! -e initrd.cpio ]; then
     echo "STOP: initrd CPIO creation failed.  Check above output."
+    popd >/dev/null
     exit 1
 fi
 
@@ -76,6 +77,7 @@ gzip initrd.cpio
 # Check to see if that worked.
 if [ ! -e initrd.cpio.gz ]; then
     echo "STOP: initrd GZIP failed.  Check above output."
+    popd >/dev/null
     exit 1
 fi
 
@@ -83,7 +85,27 @@ fi
 cp ../kernel/zImage ./
 if [ ! -e zImage ]; then
     echo "STOP: Kernel zImage not found.  Make sure the kernel has been built before running this command."
+    popd >/dev/null
     exit 1
 fi
 
-# 
+# Check to make sure mkbootimg has been built.
+if [ ! -e ../../android/build/mkbootimg ]; then
+    echo "STOP: mkbootimg not found.  Run ./prepare in the android directory and try again."
+    popd >/dev/null
+    exit 1
+fi
+if [ ! -e ../../android/build/blobpack ]; then
+    echo "STOP: blobpack not found.  Run ./prepare in the android directory and try again."
+    popd >/dev/null
+    exit 1
+fi
+
+# Use mkbootimg to prepare the blob.
+rm fs.out 2>/dev/null
+rm kernel.blob 2>/dev/null
+../../android/build/mkbootimg --kernel zImage --ramdisk initrd.cpio.gz --output fs.out
+../../android/build/blobpack -s kernel.blob LNX fs.out
+rm fs.out 2>/dev/null
+
+exit 0

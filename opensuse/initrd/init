@@ -6,10 +6,12 @@ mount -t devtmpfs devtmpfs /dev
 # Mount the /data device into a temporary location so we
 # can read the last known boot configuration.
 mount -t ext4 /dev/mmcblk0p8 /mnt2
-LINUX=/mnt2/linux
+LINUX=/mnt2/opensuse
 
 # Read the last boot configuration.
-. $LINUX/.boot
+if [ -e $LINUX/.boot ]; then
+    . $LINUX/.boot
+fi
 
 # Check if we should enter debug mode.
 if [ "$DEBUG" == "true" ]; then
@@ -38,7 +40,6 @@ if [ "$DEBUG" == "true" ]; then
 fi
 
 # Mount Linux FS
-mount -t ext4 /dev/mmcblk0p8 /mnt2
 mount -o bind $LINUX /mnt
 
 mount -t proc proc /mnt/proc 
