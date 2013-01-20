@@ -20,7 +20,7 @@ Distribution-specific steps
 
 ### OpenSUSE 12.2
 
-  1. [Preperation](general/prepare.md)
-  2. [Building](general/build.md)
-  3. [Deployment](general/deploy.md)
+  1. [Preperation](opensuse/prepare.md)
+  2. [Building](opensuse/build.md)
+  3. [Deployment](opensuse/deploy.md)
 
