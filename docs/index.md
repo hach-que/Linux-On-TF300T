@@ -129,6 +129,18 @@ Configure the following options:
 
 -->
 
+Apply kexec-hardboot patch
+-----------------------------
+
+If you want to multiboot the TF300T, you need to add support for kexec-hardboot.  The
+patch to add this functionality is located in the `linux` folder and can be applied
+like so:
+
+```
+> cd kernel-tf300t
+> git am ../kexec-hardboot.patch
+```
+
 Build the kernel
 -------------------
 

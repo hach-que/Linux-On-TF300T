@@ -1,9 +1,9 @@
 <!-- vim: set syntax=markdown: -->
 
-OpenSUSE on TF300T
+Linux on TF300T
 =========================
 
-This repository consists of both a tutorial on getting OpenSUSE running
+This repository consists of both a tutorial on getting Linux running
 on the Transformer as well as the resources you'll need to do it.
 
 <!--
@@ -17,7 +17,7 @@ on the Transformer as well as the resources you'll need to do it.
 
 -->
 
-Open [the index page](https://github.com/hach-que/OpenSUSE-On-TF300T/blob/master/docs/index.md)
-to start building OpenSUSE for the TF300T.
+Open [the index page](https://github.com/hach-que/Linux-On-TF300T/blob/master/docs/index.md)
+to start building Linux for the TF300T.
 
 

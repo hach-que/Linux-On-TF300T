@@ -237,20 +237,6 @@ index 832d372..f1ce0ef 100644
 +
 +	return dest;
 +}
-diff --git a/arch/arm/configs/cyanogenmod_grouper_defconfig b/arch/arm/configs/cyanogenmod_grouper_defconfig
-index a496ee6..347dba2 100644
---- a/arch/arm/configs/cyanogenmod_grouper_defconfig
-+++ b/arch/arm/configs/cyanogenmod_grouper_defconfig
-@@ -484,7 +484,9 @@ CONFIG_CMDLINE="tegra_wdt.heartbeat=30"
- CONFIG_CMDLINE_EXTEND=y
- # CONFIG_CMDLINE_FORCE is not set
- # CONFIG_XIP_KERNEL is not set
--# CONFIG_KEXEC is not set
-+CONFIG_KEXEC=y
-+CONFIG_ATAGS_PROC=y
-+CONFIG_KEXEC_HARDBOOT=y
- # CONFIG_CRASH_DUMP is not set
- # CONFIG_AUTO_ZRELADDR is not set
  
 diff --git a/arch/arm/include/asm/kexec.h b/arch/arm/include/asm/kexec.h
 index c2b9b4b..564c55b 100644
